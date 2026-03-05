@@ -3,12 +3,12 @@ import json
 import io
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import google.generativeai as genai
+from google import genai  # 최신 구글 패키지로 변경됨
 from PIL import Image
 
 app = FastAPI()
 
-# 1. 보안(CORS) 설정: 홈페이지의 접근을 허용합니다. [cite: 2026-02-11]
+# 1. 완벽한 보안(CORS) 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -20,18 +20,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 2. 서버 연결 확인용 (브라우저에서 보이는 메시지)
 @app.get("/")
 async def root():
     return {"message": "노엘의 찬양노트 AI 서버가 준비되었습니다!"}
 
-# 3. 제미나이 AI 설정 [cite: 2026-02-11]
-# Render의 Environment에 넣은 'APP_AI_KEY'를 가져와서 사용합니다.
+# 2. 최신 제미나이 클라이언트 연결
 APP_AI_KEY = os.getenv("APP_AI_KEY")
-genai.configure(api_key=APP_AI_KEY)
-model = genai.GenerativeModel('gemini-1.5-pro')
+client = genai.Client(api_key=APP_AI_KEY)
 
-# 4. 핵심 기능: 악보 분석 (이 부분이 404 에러의 원인이었습니다!) [cite: 2026-02-11]
+# 3. 악보 분석 로직 (최신 gemini-2.0-flash 모델 적용)
 @app.post("/analyze-sheet")
 async def analyze_sheet(file: UploadFile = File(...)):
     try:
@@ -44,16 +41,21 @@ async def analyze_sheet(file: UploadFile = File(...)):
         {
             "melody": [
                 {"note": "C4", "duration": "4n", "time": "0:0:0"},
-                ...
+                {"note": "E4", "duration": "4n", "time": "0:1:0"}
             ]
         }
         """
-        response = model.generate_content([prompt, img])
         
-        # AI 응답에서 JSON만 추출
+        # 최신 SDK의 호출 방식입니다.
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=[img, prompt]
+        )
+        
+        # JSON 정제 및 반환
         clean_json = response.text.replace('```json', '').replace('```', '').strip()
         return json.loads(clean_json)
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
+    except Exception as e:
+        print(f"Error detail: {str(e)}")
+        raise HTTPException(status_code=500, detail="악보 분석 중 오류가 발생했습니다.")
