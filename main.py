@@ -29,7 +29,7 @@ async def root():
 # Render의 Environment에 넣은 'APP_AI_KEY'를 가져와서 사용합니다.
 APP_AI_KEY = os.getenv("APP_AI_KEY")
 genai.configure(api_key=APP_AI_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-1.5-pro')
 
 # 4. 핵심 기능: 악보 분석 (이 부분이 404 에러의 원인이었습니다!) [cite: 2026-02-11]
 @app.post("/analyze-sheet")
@@ -56,3 +56,4 @@ async def analyze_sheet(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
