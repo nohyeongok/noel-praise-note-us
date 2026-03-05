@@ -28,7 +28,7 @@ async def root():
 APP_AI_KEY = os.getenv("APP_AI_KEY")
 client = genai.Client(api_key=APP_AI_KEY)
 
-# 3. 악보 분석 로직 (최신 gemini-2.0-flash 모델 적용)
+# 3. 악보 분석 로직 (최신 gemini-1.5-flash 모델 적용)
 @app.post("/analyze-sheet")
 async def analyze_sheet(file: UploadFile = File(...)):
     try:
@@ -59,3 +59,4 @@ async def analyze_sheet(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error detail: {str(e)}")
         raise HTTPException(status_code=500, detail="악보 분석 중 오류가 발생했습니다.")
+
