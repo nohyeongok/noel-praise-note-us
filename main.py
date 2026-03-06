@@ -3,12 +3,11 @@ import json
 import io
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import google.generativeai as genai
+from google import genai
 from PIL import Image
 
 app = FastAPI()
 
-# 목사님이 요청하신 중앙 정렬 및 디자인 최적화를 위해 모든 접속을 허용합니다. [cite: 2026-02-11]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,10 +18,13 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "노엘의 찬양노트 표준 서버가 정상 작동 중입니다!"}
+    return {"message": "노엘의 찬양노트 최신 정식 서버 가동 중!"}
 
-# 안정적인 표준 라이브러리 설정
-genai.configure(api_key=os.getenv("APP_AI_KEY"))
+# [핵심] 최신 라이브러리를 사용하고, 정식 버전(v1)을 강제로 사용합니다.
+client = genai.Client(
+    api_key=os.getenv("APP_AI_KEY"),
+    http_options={'api_version': 'v1'}
+)
 
 @app.post("/analyze-sheet")
 async def analyze_sheet(file: UploadFile = File(...)):
@@ -30,21 +32,18 @@ async def analyze_sheet(file: UploadFile = File(...)):
         content = await file.read()
         img = Image.open(io.BytesIO(content))
         
-        # 404 에러를 피하기 위해 가장 최신의 안정적인 모델명을 사용합니다.
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        # 모델 이름에서 'models/'를 빼고 부르는 것이 최신 방식입니다.
+        response = client.models.generate_content(
+            model='gemini-1.5-flash', 
+            contents=[img, "이 악보를 분석해서 {melody: [{note: 'C4', duration: '4n', time: '0:0:0'}]} 형식의 JSON 데이터만 출력해줘."]
+        )
         
-        prompt = "이 악보를 분석해서 {melody: [{note: 'C4', duration: '4n', time: '0:0:0'}]} 형식의 JSON 데이터만 출력해줘."
-        
-        # 표준 방식으로 콘텐츠 생성 시도
-        response = model.generate_content([img, prompt])
-        
-        # 결과값에서 JSON 텍스트만 추출
+        # 결과에서 JSON 부분만 깔끔하게 추출합니다.
         clean_json = response.text.replace('```json', '').replace('```', '').strip()
         return json.loads(clean_json)
 
     except Exception as e:
         print(f"Error detail: {str(e)}")
-        # 에러 발생 시 로그에 상세 내용을 남깁니다.
         raise HTTPException(status_code=500, detail=f"분석 실패: {str(e)}")
 
 
