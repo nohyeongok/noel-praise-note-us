@@ -8,13 +8,9 @@ from PIL import Image
 
 app = FastAPI()
 
-# 노엘의 찬양노트 전용 보안 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://noelnote.kr", "https://www.noelnote.kr",
-        "http://noelnote.kr", "http://www.noelnote.kr"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -22,32 +18,40 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "노엘의 찬양노트 미국 서버가 완벽하게 준비되었습니다!"}
+    return {"message": "노엘의 찬양노트 미국 서버가 가동 중입니다!"}
 
 APP_AI_KEY = os.getenv("APP_AI_KEY")
 client = genai.Client(api_key=APP_AI_KEY)
 
 @app.post("/analyze-sheet")
 async def analyze_sheet(file: UploadFile = File(...)):
-    try:
-        content = await file.read()
-        img = Image.open(io.BytesIO(content))
+    # 구글이 허락한 모델 이름을 순서대로 시도합니다.
+    # 404나 429 에러를 피하기 위한 '필승 목록'입니다.
+    candidate_models = [
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-8b',
+        'gemini-1.5-pro'
+    ]
+    
+    content = await file.read()
+    img = Image.open(io.BytesIO(content))
+    prompt = "이 악보를 분석해서 {melody: [{note: 'C4', duration: '4n', time: '0:0:0'}]} 형식의 JSON으로만 대답해줘."
 
-        # 악보 분석을 위한 가장 효율적인 프롬프트
-        prompt = "이 악보를 분석해서 {melody: [{note: 'C4', duration: '4n', time: '0:0:0'}]} 형식의 JSON 데이터만 출력해줘."
-        
-        # 목록에서 확인된 가장 안정적인 모델 'gemini-1.5-flash-8b'를 사용합니다.
-        response = client.models.generate_content(
-            model='gemini-1.5-flash-8b',
-            contents=[img, prompt]
-        )
-        
-        # 구글의 응답에서 JSON만 깔끔하게 추출
-        text_response = response.text
-        clean_json = text_response.replace('```json', '').replace('```', '').strip()
-        
-        return json.loads(clean_json)
+    last_error = ""
+    for model_name in candidate_models:
+        try:
+            print(f"Trying model: {model_name}...")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[img, prompt]
+            )
+            # 성공하면 즉시 결과 반환
+            clean_json = response.text.replace('```json', '').replace('```', '').strip()
+            return json.loads(clean_json)
+        except Exception as e:
+            last_error = str(e)
+            print(f"Model {model_name} failed: {last_error}")
+            continue # 다음 모델로 넘어감
 
-    except Exception as e:
-        print(f"Error detail: {str(e)}")
-        raise HTTPException(status_code=500, detail="악보 분석 중 오류가 발생했습니다.")
+    # 모든 모델이 실패했을 경우
+    raise HTTPException(status_code=500, detail=f"모든 모델 접속 실패: {last_error}")
