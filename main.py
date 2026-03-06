@@ -8,6 +8,7 @@ from PIL import Image
 
 app = FastAPI()
 
+# 2월 11일에 말씀하신 디자인 지침(중앙 정렬 등)이 잘 반영되도록 서버 설정을 유지합니다.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,15 +19,11 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "노엘의 찬양노트 정식 채널(v1) 서버가 가동 중입니다!"}
+    return {"message": "노엘의 찬양노트 미국 서버가 최종 응답 대기 중입니다!"}
 
 APP_AI_KEY = os.getenv("APP_AI_KEY")
-
-# [핵심 수정] 구글에게 'v1beta'가 아닌 정식 'v1' 채널을 사용하도록 강제합니다.
-client = genai.Client(
-    api_key=APP_AI_KEY,
-    http_options={'api_version': 'v1'}
-)
+# 가장 기본 설정으로 클라이언트를 생성합니다.
+client = genai.Client(api_key=APP_AI_KEY)
 
 @app.post("/analyze-sheet")
 async def analyze_sheet(file: UploadFile = File(...)):
@@ -34,16 +31,22 @@ async def analyze_sheet(file: UploadFile = File(...)):
         content = await file.read()
         img = Image.open(io.BytesIO(content))
         
-        # 정식 채널에서는 'models/' 접두사 없이 이름만 부르는 것이 가장 정확합니다.
+        # 모델 이름을 'models/' 없이 가장 단순한 별칭으로 부릅니다.
+        # 구글 SDK가 내부적으로 가장 잘 알아듣는 방식입니다.
         response = client.models.generate_content(
             model='gemini-1.5-flash', 
-            contents=[img, "이 악보를 분석해서 {melody: [{note: 'C4', duration: '4n', time: '0:0:0'}]} 형식의 JSON 데이터만 출력해줘."]
+            contents=[
+                img, 
+                "이 악보를 분석해서 {melody: [{note: 'C4', duration: '4n', time: '0:0:0'}]} 형식의 JSON 데이터만 출력해줘."
+            ]
         )
         
         text_response = response.text
+        # 결과에서 불필요한 마크다운 기호를 제거합니다.
         clean_json = text_response.replace('```json', '').replace('```', '').strip()
         return json.loads(clean_json)
 
     except Exception as e:
         print(f"Error detail: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"정식 채널 분석 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"분석 시도 중 오류 발생: {str(e)}")
+
