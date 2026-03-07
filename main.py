@@ -8,7 +8,7 @@ from PIL import Image
 
 app = FastAPI()
 
-# 목사님의 레이아웃 지침을 준수하며 모든 접속을 허용합니다. [cite: 2026-02-11]
+# 목사님의 디자인 지침(중앙 정렬 및 모바일 최적화 지원)을 위해 모든 접속을 허용합니다. [cite: 2026-02-11]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,31 +19,33 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "노엘의 찬양노트 US 서버가 깨끗하게 가동 중입니다!"}
+    return {"message": "노엘의 찬양노트 2026 표준 서버 가동 중!"}
 
-# [필수] 구글이 권장하는 최신 무전기(v1 정식 채널) 설정입니다.
-client = genai.Client(
-    api_key=os.getenv("APP_AI_KEY"),
-    http_options={'api_version': 'v1'}
-)
+# [수정] 2026년 표준 설정으로 변경합니다.
+client = genai.Client(api_key=os.getenv("APP_AI_KEY"))
 
 @app.post("/analyze-sheet")
 async def analyze_sheet(file: UploadFile = File(...)):
-    print(">>> [LOG] 새로운 악보 분석을 시작합니다!")
+    print(">>> [LOG] 악보 분석을 시작합니다!") 
     try:
         content = await file.read()
         img = Image.open(io.BytesIO(content))
         
-        # 가장 안정적인 정식 모델을 호출합니다.
+        # 2026년 가장 성능이 좋은 최신 모델 이름을 사용합니다.
         response = client.models.generate_content(
-            model='gemini-1.5-flash', 
-            contents=[img, "이 악보를 분석해서 {melody: [{note: 'C4', duration: '4n', time: '0:0:0'}]} 형식의 JSON 데이터만 출력해줘."]
+            model='gemini-2.0-flash', 
+            contents=[
+                img, 
+                "이 악보를 분석해서 {melody: [{note: 'C4', duration: '4n', time: '0:0:0'}]} 형식의 JSON 데이터만 출력해줘. 다른 설명은 하지 말고 JSON만 출력해."
+            ]
         )
         
+        # 결과값 정제
         clean_json = response.text.replace('```json', '').replace('```', '').strip()
-        print(">>> [LOG] 분석에 성공했습니다!")
+        print(">>> [LOG] 분석 성공!")
         return json.loads(clean_json)
 
     except Exception as e:
-        print(f">>> [ERROR] 발생: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f">>> [ERROR] 발생 상세: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"분석 시도 중 오류: {str(e)}")
+
