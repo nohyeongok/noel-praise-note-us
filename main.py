@@ -33,7 +33,7 @@ async def analyze_sheet(file: UploadFile = File(...)):
         
         # 2026년 가장 성능이 좋은 최신 모델 이름을 사용합니다.
         response = client.models.generate_content(
-            model='gemini-2.0-flash', 
+            model='gemini-1.5-flash', 
             contents=[
                 img, 
                 "이 악보를 분석해서 {melody: [{note: 'C4', duration: '4n', time: '0:0:0'}]} 형식의 JSON 데이터만 출력해줘. 다른 설명은 하지 말고 JSON만 출력해."
@@ -48,4 +48,5 @@ async def analyze_sheet(file: UploadFile = File(...)):
     except Exception as e:
         print(f">>> [ERROR] 발생 상세: {str(e)}")
         raise HTTPException(status_code=500, detail=f"분석 시도 중 오류: {str(e)}")
+
 
