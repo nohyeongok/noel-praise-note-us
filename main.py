@@ -1,10 +1,11 @@
-import os, io, json, re
+import os
+import json
+import io
 import xml.etree.ElementTree as ET
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import google.generativeai as genai
 from PIL import Image
-from google import genai
-from google.genai import types
 
 app = FastAPI()
 
@@ -17,58 +18,75 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-api_key = os.environ.get("GOOGLE_API_KEY")
-client = genai.Client(api_key=api_key) if api_key else None
-
 @app.get("/")
 async def root():
     return {"message": "노엘 뮤직 AI 프로 서버가 완벽하게 가동 중입니다!"}
 
-# [기능 1] 이미지 악보 분석 (유료 프로 모델 적용)
+# 💡 목사님의 렌더 서버에 세팅된 환경변수(APP_AI_KEY)를 그대로 사용합니다.
+api_key = os.getenv("APP_AI_KEY") or os.getenv("GOOGLE_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
+
+# =========================================================
+# [기능 1] 이미지 악보 분석 (안정된 라이브러리 + 유료 Pro 모델)
+# =========================================================
 @app.post("/analyze-sheet")
 async def analyze_sheet(file: UploadFile = File(...)):
-    if not client: raise HTTPException(status_code=500, detail="API Key missing")
     try:
         content = await file.read()
-        img = Image.open(io.BytesIO(content)).convert('RGB')
-        buffer = io.BytesIO()
-        img.save(buffer, format="JPEG")
+        img = Image.open(io.BytesIO(content))
+        if img.mode != 'RGB': 
+            img = img.convert('RGB')
         
-        # 유료 계정의 강력한 성능을 위해 gemini-1.5-pro 모델 사용
-        response = client.models.generate_content(
-            model='gemini-1.5-pro',
-            contents=[
-                types.Part.from_bytes(data=buffer.getvalue(), mime_type='image/jpeg'),
-                "이 악보의 멜로디를 정밀 분석해서 JSON으로 변환해줘. melody 키 안에 note, duration, time 정보를 포함해."
-            ],
-            config=types.GenerateContentConfig(response_mime_type='application/json')
-        )
-        return response.parsed
+        # 🚀 유료 사용자의 특권: 가장 정밀한 'pro' 모델 적용
+        model = genai.GenerativeModel('gemini-1.5-pro')
+        
+        prompt = """이 악보의 멜로디를 정밀 분석해서 JSON으로 변환해줘. 
+        반드시 다음 형식으로만 대답해: 
+        {"melody": [{"note": "C4", "duration": "4n", "time": "+0.0"}]}
+        다른 설명은 절대 하지 마."""
+        
+        response = model.generate_content([img, prompt])
+        
+        # 결과에서 JSON 텍스트만 깔끔하게 추출 (기존 성공 로직)
+        text_response = response.text
+        clean_json = text_response.replace('```json', '').replace('```', '').strip()
+        return json.loads(clean_json)
+
     except Exception as e:
-        print(f">>> [ERROR] 분석 실패: {str(e)}")
-        # 💡 중괄호 오류(SyntaxError)가 발생했던 부분을 완벽히 수정했습니다!
+        print(f">>> [ERROR] 이미지 분석 실패: {str(e)}")
+        # 실패 시 빈 배열 반환하여 화면이 멈추지 않도록 함
         return {"melody": []}
 
-# [기능 2] MusicXML 정밀 분석 (박자 동기화 완료)
+# =========================================================
+# [기능 2] MusicXML 정밀 분석 (main5.html 용 박자 동기화)
+# =========================================================
 @app.post("/analyze-xml")
 async def analyze_xml(file: UploadFile = File(...)):
     try:
         content = await file.read()
         root = ET.fromstring(content)
         melody_data = []
+        
         divisions = 1
         div_node = root.find('.//divisions')
-        if div_node is not None: divisions = int(div_node.text)
+        if div_node is not None: 
+            divisions = int(div_node.text)
         
+        # BPM 120 속도 기준
         seconds_per_beat = 0.5 
         current_time = 0.0
+        
         for measure in root.findall('.//measure'):
             for note in measure.findall('note'):
                 dur_node = note.find('duration')
-                if dur_node is None: continue
+                if dur_node is None: 
+                    continue
+                
                 dur_val = int(dur_node.text)
                 note_dur_sec = (dur_val / divisions) * seconds_per_beat
                 
+                # 쉼표 처리
                 if note.find('rest') is not None:
                     current_time += note_dur_sec
                     continue
@@ -76,10 +94,15 @@ async def analyze_xml(file: UploadFile = File(...)):
                 pitch = note.find('pitch')
                 if pitch:
                     note_name = f"{pitch.find('step').text}{pitch.find('octave').text}"
-                    melody_data.append({"note": note_name, "duration": "4n", "time": f"+{current_time}"})
+                    melody_data.append({
+                        "note": note_name, 
+                        "duration": "4n", 
+                        "time": f"+{current_time}"
+                    })
                     current_time += note_dur_sec
+                    
         return {"melody": melody_data}
     except Exception as e:
         print(f">>> [ERROR] XML 분석 실패: {str(e)}")
-        # 💡 여기도 깔끔하게 수정 완료!
         return {"melody": []}
+
