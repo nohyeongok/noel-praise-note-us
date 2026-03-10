@@ -28,7 +28,7 @@ async def analyze_sheet(file: UploadFile = File(...)):
         buffer = io.BytesIO()
         img.save(buffer, format="JPEG")
         
-        # 모델명을 가장 안정적인 1.5-flash로 고정하여 404 에러를 방지합니다.
+        # 🚀 가장 안정적인 gemini-1.5-flash로 고정하여 404 에러를 방지합니다.
         response = client.models.generate_content(
             model='gemini-1.5-flash',
             contents=[
@@ -39,11 +39,10 @@ async def analyze_sheet(file: UploadFile = File(...)):
         )
         return response.parsed
     except Exception as e:
-        print(f">>> [ERROR] 이미지 분석 실패: {str(e)}")
         return {"melody": []}
 
 # =========================================================
-# [기능 2] MusicXML 정밀 분석 (main5.html 전용 - 박자 완벽 복구)
+# [기능 2] MusicXML 정밀 분석 (main5.html 전용 - 박자 속도 최적화)
 # =========================================================
 @app.post("/analyze-xml")
 async def analyze_xml(file: UploadFile = File(...)):
@@ -52,48 +51,37 @@ async def analyze_xml(file: UploadFile = File(...)):
         root = ET.fromstring(content)
         melody_data = []
         
-        # XML 박자의 기준이 되는 divisions 값을 정확히 찾아야 박자가 꼬이지 않습니다.
         divisions = 1
         div_node = root.find('.//divisions')
         if div_node is not None: divisions = int(div_node.text)
         
+        # 💡 박자 속도 조절 (0.5를 곱해 전체적으로 2배 빠르게 만듭니다)
+        tempo_scale = 0.5 
         current_time = 0.0
+        
         for measure in root.findall('.//measure'):
             for note in measure.findall('note'):
-                # 음표 길이(duration)를 읽어와서 실제 시간으로 환산합니다.
                 dur_node = note.find('duration')
                 dur_val = int(dur_node.text) if dur_node is not None else divisions
                 
-                # 쉼표(rest) 처리: 시간만 더하고 소리는 내지 않습니다.
                 if note.find('rest') is not None:
-                    current_time += (dur_val / divisions)
+                    current_time += (dur_val / divisions) * tempo_scale
                     continue
                 
                 pitch = note.find('pitch')
                 if pitch:
-                    step = pitch.find('step').text
-                    octave = pitch.find('octave').text
-                    alter = pitch.find('alter')
-                    
-                    note_name = step
-                    if alter is not None:
-                        if alter.text == '1': note_name += '#'
-                        elif alter.text == '-1': note_name += 'b'
-                    note_name += octave
-                    
-                    # 계산된 정확한 시간에 음표를 배치합니다.
+                    note_name = f"{pitch.find('step').text}{pitch.find('octave').text}"
                     melody_data.append({
                         "note": note_name,
-                        "duration": "4n", 
+                        "duration": "4n",
                         "time": f"+{current_time}"
                     })
-                    current_time += (dur_val / divisions)
+                    current_time += (dur_val / divisions) * tempo_scale
                     
-        print(f">>> [LOG] XML 분석 성공! {len(melody_data)}개 음표 추출 완료.")
         return {"melody": melody_data}
     except Exception as e:
-        print(f">>> [ERROR] XML 분석 실패: {str(e)}")
         return {"melody": []}
+
 
 
 
