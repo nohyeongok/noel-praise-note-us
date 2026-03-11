@@ -20,26 +20,20 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "노엘 뮤직 AI 서버 가동 중 (최신 SDK & 2.5 모델 적용 완료)!"}
+    return {"message": "노엘 뮤직 AI 서버 가동 중 (사운드 최적화 완료)!"}
 
-# 목사님의 렌더 서버 환경변수 연동
 api_key = os.getenv("APP_AI_KEY") or os.getenv("GOOGLE_API_KEY")
 client = genai.Client(api_key=api_key) if api_key else None
 
-# =========================================================
-# [기능 1] 이미지 악보 분석 (구글이 요구한 최신 모델 적용)
-# =========================================================
 @app.post("/analyze-sheet")
 async def analyze_sheet(file: UploadFile = File(...)):
-    if not client:
-        return {"melody": []}
+    if not client: return {"melody": []}
     try:
         content = await file.read()
         img = Image.open(io.BytesIO(content)).convert('RGB')
         buffer = io.BytesIO()
         img.save(buffer, format="JPEG")
         
-        # 🚀 에러 메시지의 요구대로 더 최신 모델인 'gemini-2.5-flash'를 적용합니다!
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[
@@ -48,32 +42,23 @@ async def analyze_sheet(file: UploadFile = File(...)):
             ],
             config=types.GenerateContentConfig(response_mime_type='application/json')
         )
-        
         raw_text = response.text
-        if not raw_text:
-            return {"melody": []}
+        if not raw_text: return {"melody": []}
             
         clean_json = raw_text.replace('```json', '').replace('```', '').strip()
         return json.loads(clean_json)
-
     except Exception as e:
-        print(f">>> [ERROR] 이미지 분석: {str(e)}")
         return {"melody": []}
 
-# =========================================================
-# [기능 2] MusicXML 정밀 분석 (사운드 엔진 호환 유지)
-# =========================================================
 @app.post("/analyze-xml")
 async def analyze_xml(file: UploadFile = File(...)):
     try:
         content = await file.read()
         root = ET.fromstring(content)
         melody_data = []
-        
         divisions = 1
         div_node = root.find('.//divisions')
-        if div_node is not None: 
-            divisions = int(div_node.text)
+        if div_node is not None: divisions = int(div_node.text)
         
         seconds_per_beat = 0.5 
         current_time = 0.0
@@ -81,8 +66,7 @@ async def analyze_xml(file: UploadFile = File(...)):
         for measure in root.findall('.//measure'):
             for note in measure.findall('note'):
                 dur_node = note.find('duration')
-                if dur_node is None: 
-                    continue
+                if dur_node is None: continue
                 
                 dur_val = int(dur_node.text)
                 note_dur_sec = (dur_val / divisions) * seconds_per_beat
@@ -93,24 +77,19 @@ async def analyze_xml(file: UploadFile = File(...)):
                 
                 pitch = note.find('pitch')
                 if pitch:
-                    step = pitch.find('step').text
-                    octave = pitch.find('octave').text
-                    note_name = step
-                    
+                    note_name = f"{pitch.find('step').text}{pitch.find('octave').text}"
                     alter = pitch.find('alter')
                     if alter is not None:
-                        if alter.text == '1': note_name += '#'
-                        elif alter.text == '-1': note_name += 'b'
-                    note_name += octave
+                        if alter.text == '1': note_name = note_name.replace(note_name[0], note_name[0] + '#')
+                        elif alter.text == '-1': note_name = note_name.replace(note_name[0], note_name[0] + 'b')
                     
                     melody_data.append({
                         "note": note_name, 
-                        "duration": "4n", 
+                        "duration": f"{note_dur_sec}s", # 💡 XML의 정확한 초(seconds)를 전달합니다!
                         "time": float(current_time) 
                     })
                     current_time += note_dur_sec
                     
         return {"melody": melody_data}
     except Exception as e:
-        print(f">>> [ERROR] XML 분석: {str(e)}")
         return {"melody": []}
