@@ -20,12 +20,14 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "노엘 뮤직 AI 서버 가동 중 (BPM 자동 인식 탑재)!"}
+    return {"message": "노엘 뮤직 AI 서버 가동 중 (BPM 60-400 정밀 조절판)!"}
 
 api_key = os.getenv("APP_AI_KEY") or os.getenv("GOOGLE_API_KEY")
 client = genai.Client(api_key=api_key) if api_key else None
 
-# [기능 1] 이미지 악보 분석 (기존 정밀 해독 로직 유지)
+# =========================================================
+# [기능 1] 이미지 악보 분석 (Gemini 2.5 Flash 최신 모델)
+# =========================================================
 @app.post("/analyze-sheet")
 async def analyze_sheet(file: UploadFile = File(...)):
     if not client: return {"melody": []}
@@ -48,28 +50,31 @@ async def analyze_sheet(file: UploadFile = File(...)):
     except Exception as e:
         return {"melody": []}
 
-# [기능 2] MusicXML 정밀 분석 (사용자 지정 BPM 반영 로직)
+# =========================================================
+# [기능 2] MusicXML 정밀 분석 (사용자 지정 BPM 60~400 반영)
+# =========================================================
 @app.post("/analyze-xml")
-async def analyze_xml(file: UploadFile = File(...), bpm: float = None): # 💡 bpm 파라미터 추가
+async def analyze_xml(file: UploadFile = File(...), bpm: float = None):
     try:
         content = await file.read()
         root = ET.fromstring(content)
         melody_data = []
         
-        # 💡 로직 우선순위: 1.사용자 선택값 -> 2.악보 내부값 -> 3.기본값(142)
-        final_bpm = 142.0       
+        # 💡 [핵심 로직] 우선순위: 사용자 선택(60~400) -> 악보 내부값 -> 기본값(142)
+        final_bpm = 142.0 
+        
+        # 🚀 에러가 났던 지점을 정확한 들여쓰기로 수정했습니다!
         if bpm is not None:
-    # 💡 프론트엔드 설정에 맞춰 최소값을 60으로 제한합니다.
-    final_bpm = max(60.0, bpm)
-    
-            print(f">>> [LOG] 사용자 지정 BPM 적용: {final_bpm}")
+            # 사용자가 선택한 경우 최소 60으로 제한
+            final_bpm = max(60.0, bpm)
         else:
+            # 사용자가 선택하지 않은 경우 XML 내부 템포 탐색
             tempo_node = root.find('.//per-minute')
             if tempo_node is not None:
                 try:
                     final_bpm = float(tempo_node.text)
-                    print(f">>> [LOG] 악보 고유 BPM 감지: {final_bpm}")
-                except: pass
+                except:
+                    pass
         
         seconds_per_beat = 60.0 / final_bpm
         
@@ -92,7 +97,6 @@ async def analyze_xml(file: UploadFile = File(...), bpm: float = None): # 💡 b
                 
                 pitch = note.find('pitch')
                 if pitch:
-                    # (이전의 음정 및 시간 계산 로직 동일)
                     step = pitch.find('step').text
                     octave = pitch.find('octave').text
                     note_name = step
@@ -111,5 +115,5 @@ async def analyze_xml(file: UploadFile = File(...), bpm: float = None): # 💡 b
                     
         return {"melody": melody_data, "applied_bpm": final_bpm}
     except Exception as e:
+        print(f">>> [ERROR] XML 분석: {str(e)}")
         return {"melody": []}
-
