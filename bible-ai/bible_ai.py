@@ -6,13 +6,13 @@ import google.generativeai as genai
 
 app = FastAPI()
 
-# 1. CORS 설정: noelnote.kr 관련 도메인 모두 허용
+# 1. CORS 설정
 origins = [
     "https://noelnote.kr",
     "https://www.noelnote.kr",
     "http://noelnote.kr",
     "http://www.noelnote.kr",
-    "http://localhost:3000", # 필요 없으시면 나중에 삭제하셔도 됩니다.
+    "http://localhost:3000",
 ]
 
 app.add_middleware(
@@ -44,22 +44,18 @@ class ChatRequest(BaseModel):
 @app.post("/ask")
 async def ask_bible_ai(request: ChatRequest):
     try:
-        # 질문에 구속사적 지침을 결합
         prompt = f"{SYSTEM_PROMPT}\n\n사용자 질문: {request.message}"
         response = model.generate_content(prompt)
         
-        # 만약 AI 답변이 비어있을 경우에 대비
         if not response.text:
-            raise ValueError("AI가 답변을 생성하지 못했습니다.")
+            raise ValueError("AI 답변 생성 실패")
             
         return {"answer": response.text}
 
     except Exception as e:
-        # ✨ 이 부분이 추가되었습니다! 
-        # Render의 [Logs] 화면에 에러의 구체적인 이유(예: API 키 오류 등)를 출력합니다.
-        print(f"🚨 [에러 발생 상세 내용]: {str(e)}") 
-        raise HTTPException(status_code=500, detail=f"서버 내부 오류: {str(e)}")
+        print(f"🚨 [에러 발생]: {str(e)}") 
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 async def root():
-    return {"status": "Noel Bible AI is online"}"Noel Bible AI is online"}
+    return {"status": "Noel Bible AI is online"}
