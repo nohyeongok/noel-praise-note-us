@@ -6,7 +6,7 @@ import google.generativeai as genai
 
 app = FastAPI()
 
-# 1. CORS 설정: noelnote.kr 관련 도메인 허용
+# 1. CORS 설정: noelnote.kr 관련 모든 도메인 허용
 origins = [
     "https://noelnote.kr",
     "https://www.noelnote.kr",
@@ -23,19 +23,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 2. Gemini AI 설정 (목사님이 성공하셨던 'gemini-2.5-flash' 모델 적용)
+# 2. Gemini AI 설정 (성공하셨던 2.5 Flash 모델 유지)
 GENAI_API_KEY = os.getenv("GENAI_API_KEY")
 genai.configure(api_key=GENAI_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
-# 3. 구속사적 관점 시스템 프롬프트
+# 3. 구속사적 관점 + 암기 카드 자동 생성 지침
 SYSTEM_PROMPT = """
 당신은 성경을 '구속사적 관점(Redemptive-Historical Perspective)'으로 해석하는 신학 전문가입니다.
-모든 답변은 다음 원칙을 따릅니다:
-1. 성경의 모든 사건과 인물을 '예수 그리스도를 통한 하나님의 구원 계획'과 연결합니다.
-2. 도덕적 교훈에 그치지 않고, 복음의 핵심(은혜, 대속, 완성)을 설명합니다.
-3. 사용자가 이해하기 쉽게 설명하되, 신학적 깊이를 유지합니다.
-4. 친절하고 따뜻한 목회자의 어조를 사용합니다.
+모든 답변은 다음 원칙을 반드시 따릅니다:
+
+1. 성경의 사건과 인물을 예수 그리스도를 통한 하나님의 구원 계획으로 연결하여 설명하십시오.
+2. 도덕적 훈계를 넘어 복음의 핵심(은혜, 대속, 완성)을 깊이 있게 다루십시오.
+3. 답변의 맨 마지막 줄에는 반드시 [CARD]라는 태그를 붙이고, 전체 내용을 암기하기 좋게 한 줄로 '요약'하십시오.
+4. 요약문 안에는 반드시 핵심 성경 구절을 **(성경책 장:절)** 형식으로 '굵게' 포함하십시오.
+
+예시: [CARD] 여자의 후손으로 오신 예수님이 뱀의 머리를 상하게 하심으로 승리하셨습니다. **(창 3:15)**
 """
 
 class ChatRequest(BaseModel):
@@ -44,7 +47,7 @@ class ChatRequest(BaseModel):
 @app.post("/ask")
 async def ask_bible_ai(request: ChatRequest):
     try:
-        # 질문에 구속사적 맥락 결합
+        # 시스템 프롬프트와 사용자 질문 결합
         prompt = f"{SYSTEM_PROMPT}\n\n사용자 질문: {request.message}"
         response = model.generate_content(prompt)
         
@@ -54,10 +57,10 @@ async def ask_bible_ai(request: ChatRequest):
         return {"answer": response.text}
 
     except Exception as e:
-        # Render 로그에서 확인 가능하도록 에러 상세 출력
-        print(f"🚨 [에러 발생 상세 내용]: {str(e)}") 
+        # 에러 발생 시 Render 로그에서 상세 내용을 확인할 수 있도록 출력
+        print(f"🚨 [에러 발생]: {str(e)}") 
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/")
 async def root():
-    return {"status": "Noel Bible AI is online with Gemini 2.5 Flash"}
+    return {"status": "Noel Bible AI is online with Memory Card Logic"}
