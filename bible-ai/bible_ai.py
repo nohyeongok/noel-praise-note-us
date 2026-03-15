@@ -10,6 +10,8 @@ app = FastAPI()
 origins = [
     "https://noelnote.kr",
     "https://www.noelnote.kr",
+    "http://noelnote.kr",
+    "http://www.noelnote.kr",
     "http://localhost:3000",
 ]
 
